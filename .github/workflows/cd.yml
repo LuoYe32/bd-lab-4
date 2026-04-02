@@ -1,0 +1,106 @@
+name: CD
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  deploy-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Create vault password file
+        run: echo "${{ secrets.VAULT_PASSWORD }}" > .vault_pass.txt
+
+      - name: Generate .env from Vault
+        run: |
+          ansible-playbook deploy.yml --vault-password-file .vault_pass.txt --tags "env_only"
+
+      - name: Validate required env vars
+        run: |
+          source .env
+          if [ -z "$QDRANT_API_KEY" ]; then exit 1; fi
+          if [ -z "$DOCKERHUB_USERNAME" ]; then exit 1; fi
+
+      - name: Login to DockerHub
+        run: |
+          source .env
+          echo $DOCKERHUB_TOKEN | docker login -u $DOCKERHUB_USERNAME --password-stdin
+
+      - name: Pull image
+        run: |
+          source .env
+          IMAGE="$DOCKERHUB_USERNAME/bd-lab-3-2:latest"
+          docker pull "$IMAGE"
+
+      - name: Start Qdrant
+        run: |
+          source .env
+          docker network create app-net || true
+
+          docker run -d \
+            --network app-net \
+            -p $QDRANT_PORT:$QDRANT_PORT \
+            -e QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY \
+            --name qdrant \
+            qdrant/qdrant
+
+      - name: Wait for Qdrant
+        run: |
+          source .env
+          for i in {1..30}; do
+            if curl -sf \
+              -H "api-key: $QDRANT_API_KEY" \
+              http://localhost:6333 > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs qdrant
+          exit 1
+
+      - name: Run API container
+        run: |
+          source .env
+          IMAGE="$DOCKERHUB_USERNAME/bd-lab-3-2:latest"
+
+          docker run -d \
+            --network app-net \
+            --name fashion_api \
+            -p 8000:8000 \
+            -e QDRANT_HOST=$QDRANT_HOST \
+            -e QDRANT_PORT=$QDRANT_PORT \
+            -e QDRANT_API_KEY=$QDRANT_API_KEY \
+            -e DAGSHUB_ACCESS_KEY=$DAGSHUB_ACCESS_KEY \
+            -e DAGSHUB_SECRET_KEY=$DAGSHUB_SECRET_KEY \
+            "$IMAGE"
+
+      - name: Wait for API ready
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/health | grep -q "ok"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs fashion_api
+          exit 1
+
+      - name: Install httpx
+        run: pip install httpx
+
+      - name: Run functional scenario
+        run: python tools/run_scenario.py scenario.json
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop fashion_api || true
+          docker stop qdrant || true
