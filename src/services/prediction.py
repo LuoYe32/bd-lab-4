@@ -3,7 +3,6 @@ import uuid
 import datetime
 import numpy as np
 
-from src.services.qdrant import QdrantService
 from src.messaging.kafka_producer import KafkaProducerService
 from src.schemas import KafkaPredictionEvent
 
@@ -29,17 +28,10 @@ class PredictionService:
         self.model = model
 
         try:
-            self.qdrant = QdrantService()
-            logger.info("Qdrant initialized")
-        except Exception as e:
-            logger.error(f"Qdrant init error: {e}")
-            self.qdrant = None
-
-        try:
             self.kafka = KafkaProducerService()
             logger.info("Kafka producer initialized")
-        except Exception as e:
-            logger.error(f"Kafka init error: {e}")
+        except Exception:
+            logger.exception("Kafka init error")
             self.kafka = None
 
     def predict(self, x: np.ndarray):
@@ -60,22 +52,11 @@ class PredictionService:
             "proba": [float(p) for p in proba],
         }
 
-        self._save_to_qdrant(x, result)
-        self._send_event(result)
+        self._send_event(x, result)
 
         return result
 
-    def _save_to_qdrant(self, x, result):
-        if self.qdrant is None:
-            logger.warning("Qdrant not available")
-            return
-
-        try:
-            self.qdrant.save_prediction(x, result)
-        except Exception as e:
-            logger.exception("Qdrant save failed")
-
-    def _send_event(self, result):
+    def _send_event(self, x: np.ndarray, result: dict):
         if self.kafka is None:
             logger.warning("Kafka not available")
             return
@@ -85,10 +66,13 @@ class PredictionService:
                 event_id=str(uuid.uuid4()),
                 timestamp=datetime.datetime.now(datetime.UTC).isoformat(),
                 source="fashion-api",
+                vector=x.tolist(),
                 prediction=result,
             )
 
             self.kafka.send_prediction(event.model_dump())
 
-        except Exception as e:
+            logger.info(f"Event sent to Kafka: {event.event_id}")
+
+        except Exception:
             logger.exception("Kafka send failed")

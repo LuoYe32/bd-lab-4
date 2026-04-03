@@ -1,6 +1,7 @@
 import json
 import time
 import logging
+import numpy as np
 
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError, NoBrokersAvailable
@@ -8,6 +9,7 @@ from pydantic import ValidationError
 
 from src.settings.settings import settings
 from src.schemas import KafkaPredictionEvent
+from src.services.qdrant import QdrantService
 from src.utils import setup_logging
 
 setup_logging()
@@ -27,14 +29,16 @@ def create_consumer():
     )
 
 
-def process_message(event: KafkaPredictionEvent):
-    logger.info("New prediction received")
-    logger.info(f"ID={event.event_id} class={event.prediction['class_name']}")
-
-
 def run_consumer():
 
     logger.info("Starting Kafka consumer...")
+
+    try:
+        qdrant = QdrantService()
+        logger.info("Qdrant initialized in consumer")
+    except Exception:
+        logger.exception("Failed to init Qdrant")
+        qdrant = None
 
     while True:
         try:
@@ -43,30 +47,34 @@ def run_consumer():
             break
 
         except NoBrokersAvailable:
-            logger.error("Kafka not available (No brokers)")
+            logger.error("Kafka not available")
             time.sleep(3)
 
         except KafkaError as e:
-            logger.error(f"Kafka error during connection: {e}")
-            time.sleep(3)
-
-        except Exception:
-            logger.exception("Unexpected error during Kafka connection")
+            logger.error(f"Kafka error: {e}")
             time.sleep(3)
 
     for message in consumer:
         try:
             event = KafkaPredictionEvent(**message.value)
-            process_message(event)
+
+            logger.info(
+                f"Processing event {event.event_id} class={event.prediction['class_name']}"
+            )
+
+            if qdrant is not None:
+                vector = np.array(event.vector, dtype=np.float32)
+
+                qdrant.save_prediction(
+                    vector=vector,
+                    prediction=event.prediction,
+                )
 
         except ValidationError as e:
-            logger.error(f"Invalid message schema: {e}")
-
-        except KafkaError as e:
-            logger.error(f"Kafka error while consuming: {e}")
+            logger.error(f"Invalid message: {e}")
 
         except Exception:
-            logger.exception("Unexpected error while processing message")
+            logger.exception("Failed to process message")
 
 
 if __name__ == "__main__":
