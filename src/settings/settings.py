@@ -18,6 +18,15 @@ class Settings(BaseSettings):
     dagshub_access_key: Optional[str] = None
     dagshub_secret_key: Optional[str] = None
 
+    # Kafka
+    kafka_bootstrap_servers: Optional[str] = None
+    kafka_topic_predictions: Optional[str] = None
+
+    kafka_security_protocol: Optional[str] = None
+    kafka_sasl_mechanism: Optional[str] = None
+    kafka_username: Optional[str] = None
+    kafka_password: Optional[str] = None
+
     # Docker
     docker_image: str = "bd-lab-1-6:latest"
     dockerhub_username: Optional[str] = None
@@ -38,6 +47,17 @@ class Settings(BaseSettings):
             missing.append("qdrant_port")
         if self.qdrant_api_key is None:
             missing.append("qdrant_api_key")
+
+        if self.kafka_bootstrap_servers is None:
+            missing.append("kafka_bootstrap_servers")
+        if self.kafka_topic_predictions is None:
+            missing.append("kafka_topic_predictions")
+
+        if self.kafka_security_protocol == "SASL_PLAINTEXT":
+            if self.kafka_username is None:
+                missing.append("kafka_username")
+            if self.kafka_password is None:
+                missing.append("kafka_password")
 
         if self.dagshub_access_key is None:
             missing.append("dagshub_access_key")

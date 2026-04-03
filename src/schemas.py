@@ -31,3 +31,10 @@ class SimilarItem(BaseModel):
 
 class SimilarResponse(BaseModel):
     results: List[SimilarItem]
+
+
+class KafkaPredictionEvent(BaseModel):
+    event_id: str
+    timestamp: str
+    source: str
+    prediction: Dict[str, Any]

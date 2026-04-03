@@ -49,6 +49,9 @@ jobs:
           if [ -z "$QDRANT_API_KEY" ]; then echo "QDRANT_API_KEY missing"; exit 1; fi
           if [ -z "$DOCKERHUB_USERNAME" ]; then echo "DOCKERHUB_USERNAME missing"; exit 1; fi
           if [ -z "$DOCKERHUB_TOKEN" ]; then echo "DOCKERHUB_TOKEN missing"; exit 1; fi
+          if [ -z "$KAFKA_BOOTSTRAP_SERVERS" ]; then echo "missing kafka"; exit 1; fi
+          if [ -z "$KAFKA_USERNAME" ]; then echo "missing kafka user"; exit 1; fi
+          if [ -z "$KAFKA_PASSWORD" ]; then echo "missing kafka pass"; exit 1; fi
 
       - name: Start Qdrant
         run: |

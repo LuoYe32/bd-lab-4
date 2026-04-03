@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import joblib
@@ -8,6 +9,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 
 from src.utils import read_config, ensure_dir
+
+logger = logging.getLogger(__name__)
 
 
 class FashionTrainer:
@@ -70,9 +73,9 @@ class FashionTrainer:
             encoding="utf-8"
         )
 
-        print(f"Saved model:   {self.model_path}")
-        print(f"Saved metrics: {self.metrics_path}")
-        print(f"VAL accuracy={val_acc:.4f}, f1_macro={val_f1m:.4f}")
+        logger.info(f"Saved model:   {self.model_path}")
+        logger.info(f"Saved metrics: {self.metrics_path}")
+        logger.info(f"VAL accuracy={val_acc:.4f}, f1_macro={val_f1m:.4f}")
 
 
 def main(config_path: str):

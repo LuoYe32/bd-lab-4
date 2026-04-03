@@ -1,4 +1,5 @@
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -6,6 +7,8 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from src.utils import read_config, ensure_dir
+
+logger = logging.getLogger(__name__)
 
 
 class FashionPreprocessor:
@@ -64,10 +67,10 @@ class FashionPreprocessor:
         np.savez_compressed(self.out_dir / "val.npz", X=X_val, y=y_val)
         np.savez_compressed(self.out_dir / "test.npz", X=X_test, y=y_test)
 
-        print("Saved:")
-        print(f"- {self.out_dir / 'train.npz'}: X={X_train.shape}, y={y_train.shape}")
-        print(f"- {self.out_dir / 'val.npz'}:   X={X_val.shape}, y={y_val.shape}")
-        print(f"- {self.out_dir / 'test.npz'}:  X={X_test.shape}, y={y_test.shape}")
+        logger.info("Saved:")
+        logger.info(f"- {self.out_dir / 'train.npz'}: X={X_train.shape}, y={y_train.shape}")
+        logger.info(f"- {self.out_dir / 'val.npz'}:   X={X_val.shape}, y={y_val.shape}")
+        logger.info(f"- {self.out_dir / 'test.npz'}:  X={X_test.shape}, y={y_test.shape}")
 
 
 def main(config_path: str):
