@@ -40,7 +40,7 @@ jobs:
       - name: Pull image
         run: |
           source .env
-          IMAGE="$DOCKERHUB_USERNAME/bd-lab-3-2:latest"
+          IMAGE="$DOCKERHUB_USERNAME/bd-lab-4:latest"
           docker pull "$IMAGE"
 
       - name: Start Qdrant
@@ -78,7 +78,7 @@ jobs:
       - name: Run API container
         run: |
           source .env
-          IMAGE="$DOCKERHUB_USERNAME/bd-lab-3-2:latest"
+          IMAGE="$DOCKERHUB_USERNAME/bd-lab-4:latest"
 
           docker run -d \
             --network app-net \

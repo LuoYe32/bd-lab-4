@@ -105,7 +105,7 @@ jobs:
       - name: Build and push
         run: |
           source .env
-          IMAGE="$DOCKERHUB_USERNAME/bd-lab-3-2:latest"
+          IMAGE="$DOCKERHUB_USERNAME/bd-lab-4:latest"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
 
@@ -113,7 +113,7 @@ jobs:
         run: |
           source .env
           echo "docker_image:" > dev_sec_ops.yml
-          echo "  name: $DOCKERHUB_USERNAME/bd-lab-3-2" >> dev_sec_ops.yml
+          echo "  name: $DOCKERHUB_USERNAME/bd-lab-4" >> dev_sec_ops.yml
           echo "  tag: latest" >> dev_sec_ops.yml
 
       - name: Upload DevSecOps metadata
