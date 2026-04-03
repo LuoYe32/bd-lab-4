@@ -37,4 +37,6 @@ class KafkaPredictionEvent(BaseModel):
     event_id: str
     timestamp: str
     source: str
+
+    vector: List[float]
     prediction: Dict[str, Any]
