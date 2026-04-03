@@ -19,9 +19,11 @@ def create_consumer():
         settings.kafka_topic_predictions,
         bootstrap_servers=settings.kafka_bootstrap_servers,
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-        auto_offset_reset="earliest",
-        group_id="fashion-consumer-group",
-        enable_auto_commit=True,
+
+        security_protocol=settings.kafka_security_protocol,
+        sasl_mechanism=settings.kafka_sasl_mechanism,
+        sasl_plain_username=settings.kafka_username,
+        sasl_plain_password=settings.kafka_password,
     )
 
 
