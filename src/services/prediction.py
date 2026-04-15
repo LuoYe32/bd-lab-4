@@ -3,12 +3,14 @@ import logging
 import uuid
 import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 import joblib
 import numpy as np
 from fastapi import HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
+from kafka.errors import KafkaError
+from pydantic import ValidationError
 
 from src.services.qdrant import QdrantService
 from src.messaging.kafka_producer import KafkaProducerService
@@ -43,15 +45,19 @@ class PredictionService:
     }
 
     def __init__(self, qdrant_service: Optional[QdrantService] = None) -> None:
-        self._model = None
+        self._model: Any = None
         self.qdrant = qdrant_service
+        self.kafka: Optional[KafkaProducerService] = None
 
         try:
             self.kafka = KafkaProducerService()
             logger.info("Kafka producer initialized")
-        except Exception:
-            logger.exception("Kafka init error")
-            self.kafka = None
+        except KafkaError:
+            logger.exception("Kafka init failed")
+        except ValueError:
+            logger.exception("Kafka init failed due to invalid configuration")
+        except OSError:
+            logger.exception("Kafka init failed due to OS/network error")
 
     def _load_model(self):
         if self._model is None:
@@ -263,12 +269,21 @@ class PredictionService:
                 vector=x.tolist(),
                 prediction=result,
             )
+            payload = event.model_dump()
+        except ValidationError:
+            logger.exception("Kafka event validation failed")
+            return
+        except ValueError:
+            logger.exception("Kafka event serialization failed")
+            return
 
-            self.kafka.send_prediction(event.model_dump())
+        try:
+            self.kafka.send_prediction(payload)
             logger.info("Event sent to Kafka: %s", event.event_id)
-
-        except Exception:
+        except KafkaError:
             logger.exception("Kafka send failed")
+        except OSError:
+            logger.exception("Kafka send failed due to OS/network error")
 
     def search_similar(self, x: np.ndarray, limit: int = 5):
         if self.qdrant is None:
