@@ -156,3 +156,4 @@ jobs:
         run: |
           docker stop fashion_api || true
           docker stop qdrant || true
+          rm -f .env .vault_pass.txt

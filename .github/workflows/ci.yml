@@ -164,3 +164,8 @@ jobs:
         with:
           name: devsecops-report
           path: dev_sec_ops.yml
+
+      - name: Cleanup secrets
+        if: always()
+        run: |
+          rm -f .env .vault_pass.txt
