@@ -15,20 +15,19 @@
           QDRANT_HOST={{ qdrant_host }}
           QDRANT_PORT={{ qdrant_port }}
           QDRANT_API_KEY={{ qdrant_api_key }}
-    
+
           DAGSHUB_ACCESS_KEY={{ dagshub_access_key }}
           DAGSHUB_SECRET_KEY={{ dagshub_secret_key }}
-    
+
           DOCKERHUB_USERNAME={{ dockerhub_username }}
           DOCKERHUB_TOKEN={{ dockerhub_token }}
-    
+
           KAFKA_BOOTSTRAP_SERVERS={{ kafka_bootstrap_servers }}
-          KAFKA_TOPIC_PREDICTIONS={{ kafka_topic_predictions }}
-    
           KAFKA_SECURITY_PROTOCOL={{ kafka_security_protocol }}
           KAFKA_SASL_MECHANISM={{ kafka_sasl_mechanism }}
           KAFKA_USERNAME={{ kafka_username }}
           KAFKA_PASSWORD={{ kafka_password }}
+          KAFKA_CLUSTER_ID={{ kafka_cluster_id }}
 
     - name: Run docker-compose
       command: docker-compose up -d --build

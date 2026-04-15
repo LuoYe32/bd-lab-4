@@ -52,6 +52,7 @@ jobs:
           if [ -z "$KAFKA_BOOTSTRAP_SERVERS" ]; then echo "missing kafka"; exit 1; fi
           if [ -z "$KAFKA_USERNAME" ]; then echo "missing kafka user"; exit 1; fi
           if [ -z "$KAFKA_PASSWORD" ]; then echo "missing kafka pass"; exit 1; fi
+          if [ -z "$KAFKA_CLUSTER_ID" ]; then echo "missing kafka cluster id"; exit 1; fi
 
       - name: Start Qdrant
         run: |
@@ -100,7 +101,7 @@ jobs:
             -e KAFKA_SASL_ENABLED_MECHANISMS=PLAIN \
             -e KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL=PLAIN \
             -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
-            -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk \
+            -e CLUSTER_ID=$KAFKA_CLUSTER_ID \
             -e KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/jaas.conf \
             confluentinc/cp-kafka:latest \
             bash -c "
@@ -122,6 +123,29 @@ jobs:
           done
           docker logs kafka
           exit 1
+
+      - name: Create Kafka topic
+        run: |
+          source .env
+      
+          cat > client.properties <<EOF
+          security.protocol=$KAFKA_SECURITY_PROTOCOL
+          sasl.mechanism=$KAFKA_SASL_MECHANISM
+          sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="$KAFKA_USERNAME" password="$KAFKA_PASSWORD";
+          EOF
+      
+          docker run --rm \
+            --network app-net \
+            -v $PWD/client.properties:/tmp/client.properties:ro \
+            confluentinc/cp-kafka:latest \
+            kafka-topics \
+            --bootstrap-server kafka:9092 \
+            --command-config /tmp/client.properties \
+            --create \
+            --if-not-exists \
+            --topic predictions \
+            --partitions 3 \
+            --replication-factor 1
 
       - name: Configure DVC (DagsHub)
         run: |
