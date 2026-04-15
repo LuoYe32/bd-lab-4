@@ -53,8 +53,20 @@ class DummyQdrant:
         ][:limit]
 
 
+class DummyKafkaProducer:
+    def __init__(self):
+        self.sent = []
+
+    def send_prediction(self, data: dict):
+        self.sent.append(data)
+
+
 def get_dummy_qdrant():
-    return cast(DummyQdrant, api.qdrant)
+    return cast(DummyQdrant, api.prediction_service.qdrant)
+
+
+def get_dummy_kafka():
+    return cast(DummyKafkaProducer, api.prediction_service.kafka)
 
 
 def create_dummy_model():
@@ -71,9 +83,13 @@ def create_dummy_model():
 
 def setup_test_env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+
     create_dummy_model()
-    api._model = None
-    api.qdrant = DummyQdrant()
+
+    api.prediction_service._model = None
+    api.prediction_service.qdrant = DummyQdrant()   # type: ignore
+    api.prediction_service.kafka = DummyKafkaProducer()  # type: ignore
+
     return TestClient(api.app)
 
 
@@ -101,8 +117,16 @@ def test_predict_fill(tmp_path, monkeypatch):
     assert "proba" in data
     assert len(data["proba"]) == 10
 
-    assert api.qdrant is not None
-    assert len(get_dummy_qdrant().saved) == 1
+    assert len(get_dummy_kafka().sent) == 1
+
+    event = get_dummy_kafka().sent[0]
+    assert "event_id" in event
+    assert "timestamp" in event
+    assert event["source"] == "fashion-api"
+    assert "vector" in event
+    assert len(event["vector"]) == 784
+    assert "prediction" in event
+    assert event["prediction"]["class_id"] == data["class_id"]
 
 
 def test_predict_random_endpoint(tmp_path, monkeypatch):
@@ -117,7 +141,8 @@ def test_predict_random_endpoint(tmp_path, monkeypatch):
     assert "class_name" in data
     assert len(data["proba"]) == 10
 
-    assert len(get_dummy_qdrant().saved) == 1
+    assert len(get_dummy_kafka().sent) == 1
+    assert len(get_dummy_kafka().sent[0]["vector"]) == 784
 
 
 def test_predict_image(tmp_path, monkeypatch):
@@ -140,7 +165,8 @@ def test_predict_image(tmp_path, monkeypatch):
     assert "class_name" in data
     assert len(data["proba"]) == 10
 
-    assert len(get_dummy_qdrant().saved) == 1
+    assert len(get_dummy_kafka().sent) == 1
+    assert len(get_dummy_kafka().sent[0]["vector"]) == 784
 
 
 def test_similar_endpoint(tmp_path, monkeypatch):
@@ -172,6 +198,8 @@ def test_predict_rejects_multiple_inputs(tmp_path, monkeypatch):
     assert response.status_code == 400
     assert response.json()["detail"] == "Only one of pixels, fill or random_seed can be provided"
 
+    assert len(get_dummy_kafka().sent) == 0
+
 
 def test_predict_rejects_missing_input(tmp_path, monkeypatch):
     client = setup_test_env(tmp_path, monkeypatch)
@@ -180,6 +208,8 @@ def test_predict_rejects_missing_input(tmp_path, monkeypatch):
 
     assert response.status_code == 400
     assert response.json()["detail"] == "One of pixels, fill or random_seed must be provided"
+
+    assert len(get_dummy_kafka().sent) == 0
 
 
 def test_predict_rejects_wrong_pixels_length(tmp_path, monkeypatch):
@@ -190,6 +220,8 @@ def test_predict_rejects_wrong_pixels_length(tmp_path, monkeypatch):
     assert response.status_code == 400
     assert response.json()["detail"] == "pixels must contain 784 values"
 
+    assert len(get_dummy_kafka().sent) == 0
+
 
 def test_predict_rejects_negative_fill(tmp_path, monkeypatch):
     client = setup_test_env(tmp_path, monkeypatch)
@@ -199,6 +231,8 @@ def test_predict_rejects_negative_fill(tmp_path, monkeypatch):
     assert response.status_code == 400
     assert response.json()["detail"] == "fill must be non-negative"
 
+    assert len(get_dummy_kafka().sent) == 0
+
 
 def test_predict_random_rejects_negative_seed(tmp_path, monkeypatch):
     client = setup_test_env(tmp_path, monkeypatch)
@@ -207,6 +241,8 @@ def test_predict_random_rejects_negative_seed(tmp_path, monkeypatch):
 
     assert response.status_code == 400
     assert response.json()["detail"] == "seed must be non-negative"
+
+    assert len(get_dummy_kafka().sent) == 0
 
 
 def test_predict_image_rejects_wrong_content_type(tmp_path, monkeypatch):
@@ -220,6 +256,8 @@ def test_predict_image_rejects_wrong_content_type(tmp_path, monkeypatch):
     assert response.status_code == 400
     assert response.json()["detail"] == "Unsupported file type. Allowed: png, jpg, jpeg, bmp"
 
+    assert len(get_dummy_kafka().sent) == 0
+
 
 def test_predict_image_rejects_empty_file(tmp_path, monkeypatch):
     client = setup_test_env(tmp_path, monkeypatch)
@@ -232,12 +270,16 @@ def test_predict_image_rejects_empty_file(tmp_path, monkeypatch):
     assert response.status_code == 400
     assert response.json()["detail"] == "Empty file"
 
+    assert len(get_dummy_kafka().sent) == 0
+
 
 def test_similar_returns_500_when_qdrant_unavailable(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     create_dummy_model()
-    api._model = None
-    api.qdrant = None
+
+    api.prediction_service._model = None
+    api.prediction_service.qdrant = None
+    api.prediction_service.kafka = DummyKafkaProducer()  # type: ignore
 
     client = TestClient(api.app)
 

@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 from fastapi import FastAPI, File, UploadFile
+from qdrant_client.http.exceptions import ResponseHandlingException
 
 from src.services.qdrant import QdrantService
 from src.schemas import PredictRequest, PredictResponse, SimilarResponse
@@ -12,8 +13,8 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Fashion-MNIST Classic ML API")
 
 try:
-    qdrant_service = QdrantService()
-except RuntimeError as exc:
+    qdrant_service: Optional[QdrantService] = QdrantService()
+except (RuntimeError, ResponseHandlingException, OSError) as exc:
     logger.warning("Qdrant init error: %s", exc)
     qdrant_service = None
 

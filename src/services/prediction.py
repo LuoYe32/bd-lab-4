@@ -264,7 +264,7 @@ class PredictionService:
         try:
             event = KafkaPredictionEvent(
                 event_id=str(uuid.uuid4()),
-                timestamp=datetime.datetime.now(datetime.UTC).isoformat(),
+                timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 source="fashion-api",
                 vector=x.tolist(),
                 prediction=result,
