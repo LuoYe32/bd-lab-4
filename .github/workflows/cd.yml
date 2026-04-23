@@ -98,34 +98,34 @@ jobs:
             -e CLUSTER_ID=$KAFKA_CLUSTER_ID \
             -e KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/jaas.conf \
             confluentinc/cp-kafka:latest \
-            bash -c "
+            bash -c '
               echo "KafkaServer {
                 org.apache.kafka.common.security.plain.PlainLoginModule required
                 username=\"admin\"
                 password=\"admin-secret\"
                 user_admin=\"admin-secret\";
               };" > /etc/kafka/jaas.conf &&
-      
+            
               echo "security.protocol=SASL_PLAINTEXT
-              sasl.mechanism=PLAIN
-              sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"admin\" password=\"admin-secret\";" > /etc/kafka/client.properties &&
-      
+            sasl.mechanism=PLAIN
+            sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"admin\" password=\"admin-secret\";" > /etc/kafka/client.properties &&
+            
               /etc/confluent/docker/run &
-      
-              echo "Waiting for Kafka to be ready..." &&
+            
+              echo "Waiting for Kafka..." &&
               sleep 15 &&
-      
+            
               kafka-topics \
                 --bootstrap-server localhost:9092 \
                 --command-config /etc/kafka/client.properties \
                 --create \
                 --if-not-exists \
-                --topic $$KAFKA_TOPIC_NAME \
-                --partitions $$KAFKA_TOPIC_PARTITIONS \
+                --topic predictions \
+                --partitions 3 \
                 --replication-factor 1 &&
-      
+            
               wait
-            "
+            '
 
       - name: Wait for Kafka
         run: |
