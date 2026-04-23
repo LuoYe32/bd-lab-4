@@ -105,13 +105,32 @@ jobs:
             -e KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/jaas.conf \
             confluentinc/cp-kafka:latest \
             bash -c "
-              echo 'KafkaServer {
+              echo "KafkaServer {
                 org.apache.kafka.common.security.plain.PlainLoginModule required
-                username=\"'$KAFKA_USERNAME'\"
-                password=\"'$KAFKA_PASSWORD'\"
-                user_'$KAFKA_USERNAME'=\"'$KAFKA_PASSWORD'\";
-              };' > /etc/kafka/jaas.conf &&
-              /etc/confluent/docker/run
+                username=\"admin\"
+                password=\"admin-secret\"
+                user_admin=\"admin-secret\";
+              };" > /etc/kafka/jaas.conf &&
+      
+              echo "security.protocol=SASL_PLAINTEXT
+              sasl.mechanism=PLAIN
+              sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"admin\" password=\"admin-secret\";" > /etc/kafka/client.properties &&
+      
+              /etc/confluent/docker/run &
+      
+              echo "Waiting for Kafka to be ready..." &&
+              sleep 15 &&
+      
+              kafka-topics \
+                --bootstrap-server localhost:9092 \
+                --command-config /etc/kafka/client.properties \
+                --create \
+                --if-not-exists \
+                --topic $$KAFKA_TOPIC_NAME \
+                --partitions $$KAFKA_TOPIC_PARTITIONS \
+                --replication-factor 1 &&
+      
+              wait
             "
 
       - name: Wait for Kafka
@@ -123,29 +142,6 @@ jobs:
           done
           docker logs kafka
           exit 1
-
-      - name: Create Kafka topic
-        run: |
-          source .env
-      
-          cat > client.properties <<EOF
-          security.protocol=$KAFKA_SECURITY_PROTOCOL
-          sasl.mechanism=$KAFKA_SASL_MECHANISM
-          sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="$KAFKA_USERNAME" password="$KAFKA_PASSWORD";
-          EOF
-      
-          docker run --rm \
-            --network app-net \
-            -v $PWD/client.properties:/tmp/client.properties:ro \
-            confluentinc/cp-kafka:latest \
-            kafka-topics \
-            --bootstrap-server kafka:9092 \
-            --command-config /tmp/client.properties \
-            --create \
-            --if-not-exists \
-            --topic predictions \
-            --partitions 3 \
-            --replication-factor 1
 
       - name: Configure DVC (DagsHub)
         run: |

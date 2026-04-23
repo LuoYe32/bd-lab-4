@@ -6,9 +6,10 @@ services:
     env_file:
       - .env
     depends_on:
-      - qdrant
-      - kafka
-      - kafka-init
+      kafka:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
 
   consumer:
     build: .
@@ -17,14 +18,15 @@ services:
       - .env
     depends_on:
       - kafka
-      - kafka-init
 
   kafka:
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "9092" ]
+      interval: 5s
+      retries: 10
     image: confluentinc/cp-kafka:latest
     ports:
       - "9092:9092"
-    env_file:
-      - .env
     environment:
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_NODE_ID: 1
@@ -41,46 +43,44 @@ services:
       KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
 
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
 
-      KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/jaas.conf
+      KAFKA_TOPIC_NAME: predictions
+      KAFKA_TOPIC_PARTITIONS: 3
 
       CLUSTER_ID: ${KAFKA_CLUSTER_ID}
+
+      KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/jaas.conf
 
     command: >
       bash -c '
         echo "KafkaServer {
           org.apache.kafka.common.security.plain.PlainLoginModule required
-          username=\"${KAFKA_USERNAME}\"
-          password=\"${KAFKA_PASSWORD}\"
-          user_${KAFKA_USERNAME}=\"${KAFKA_PASSWORD}\";
+          username=\"admin\"
+          password=\"admin-secret\"
+          user_admin=\"admin-secret\";
         };" > /etc/kafka/jaas.conf &&
-        /etc/confluent/docker/run
-      '
 
-  kafka-init:
-    image: confluentinc/cp-kafka:latest
-    depends_on:
-      - kafka
-    entrypoint: ["/bin/bash", "-c"]
-    command: >
-      "
-      echo 'Waiting for Kafka...' &&
-      cub kafka-ready -b kafka:9092 1 30 &&
-      kafka-topics
-      --bootstrap-server kafka:9092
-      --command-config /tmp/client.properties
-      --create
-      --if-not-exists
-      --topic predictions
-      --partitions 3
-      --replication-factor 1 &&
-      echo 'Topic predictions is ready'
-      "
-    environment:
-      KAFKA_USERNAME: ${KAFKA_USERNAME}
-      KAFKA_PASSWORD: ${KAFKA_PASSWORD}
-    volumes:
-      - ./kafka-client.properties:/tmp/client.properties:ro
+        echo "security.protocol=SASL_PLAINTEXT
+        sasl.mechanism=PLAIN
+        sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"admin\" password=\"admin-secret\";" > /etc/kafka/client.properties &&
+
+        /etc/confluent/docker/run &
+
+        echo "Waiting for Kafka to be ready..." &&
+        sleep 15 &&
+
+        kafka-topics \
+          --bootstrap-server localhost:9092 \
+          --command-config /etc/kafka/client.properties \
+          --create \
+          --if-not-exists \
+          --topic $$KAFKA_TOPIC_NAME \
+          --partitions $$KAFKA_TOPIC_PARTITIONS \
+          --replication-factor 1 &&
+
+        wait
+      '
 
   qdrant:
     image: qdrant/qdrant

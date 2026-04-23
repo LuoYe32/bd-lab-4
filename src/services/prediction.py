@@ -9,7 +9,7 @@ import joblib
 import numpy as np
 from fastapi import HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
-from kafka.errors import KafkaError
+from kafka.errors import KafkaError, NoBrokersAvailable
 from pydantic import ValidationError
 
 from src.services.qdrant import QdrantService
@@ -49,15 +49,26 @@ class PredictionService:
         self.qdrant = qdrant_service
         self.kafka: Optional[KafkaProducerService] = None
 
+    def _get_kafka(self) -> Optional[KafkaProducerService]:
+        if self.kafka is not None:
+            return self.kafka
+
         try:
             self.kafka = KafkaProducerService()
             logger.info("Kafka producer initialized")
+            return self.kafka
+        except NoBrokersAvailable:
+            logger.warning("Kafka broker is not ready yet")
+            return None
         except KafkaError:
             logger.exception("Kafka init failed")
+            return None
         except ValueError:
             logger.exception("Kafka init failed due to invalid configuration")
+            return None
         except OSError:
             logger.exception("Kafka init failed due to OS/network error")
+            return None
 
     def _load_model(self):
         if self._model is None:
@@ -253,11 +264,11 @@ class PredictionService:
         }
 
         self._send_event(x, result)
-
         return result
 
     def _send_event(self, x: np.ndarray, result: dict) -> None:
-        if self.kafka is None:
+        kafka = self._get_kafka()
+        if kafka is None:
             logger.warning("Kafka not available")
             return
 
@@ -278,7 +289,7 @@ class PredictionService:
             return
 
         try:
-            self.kafka.send_prediction(payload)
+            kafka.send_prediction(payload)
             logger.info("Event sent to Kafka: %s", event.event_id)
         except KafkaError:
             logger.exception("Kafka send failed")
