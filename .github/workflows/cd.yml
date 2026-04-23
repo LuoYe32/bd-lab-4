@@ -31,6 +31,7 @@ jobs:
           if [ -z "$KAFKA_BOOTSTRAP_SERVERS" ]; then echo "missing kafka"; exit 1; fi
           if [ -z "$KAFKA_USERNAME" ]; then echo "missing kafka user"; exit 1; fi
           if [ -z "$KAFKA_PASSWORD" ]; then echo "missing kafka pass"; exit 1; fi
+          if [ -z "$KAFKA_CLUSTER_ID" ]; then echo "missing kafka cluster id"; exit 1; fi
 
       - name: Login to DockerHub
         run: |
@@ -53,7 +54,6 @@ jobs:
             -p $QDRANT_PORT:$QDRANT_PORT \
             -e QDRANT__SERVICE__API_KEY=$QDRANT_API_KEY \
             -e KAFKA_BOOTSTRAP_SERVERS=$KAFKA_BOOTSTRAP_SERVERS \
-            -e KAFKA_TOPIC_PREDICTIONS=$KAFKA_TOPIC_PREDICTIONS \
             -e KAFKA_SECURITY_PROTOCOL=$KAFKA_SECURITY_PROTOCOL \
             -e KAFKA_SASL_MECHANISM=$KAFKA_SASL_MECHANISM \
             -e KAFKA_USERNAME=$KAFKA_USERNAME \
@@ -95,17 +95,36 @@ jobs:
             -e KAFKA_SASL_ENABLED_MECHANISMS=PLAIN \
             -e KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL=PLAIN \
             -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
-            -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk \
+            -e CLUSTER_ID=$KAFKA_CLUSTER_ID \
             -e KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/jaas.conf \
             confluentinc/cp-kafka:latest \
             bash -c "
-              echo 'KafkaServer {
+              echo "KafkaServer {
                 org.apache.kafka.common.security.plain.PlainLoginModule required
-                username=\"'$KAFKA_USERNAME'\"
-                password=\"'$KAFKA_PASSWORD'\"
-                user_'$KAFKA_USERNAME'=\"'$KAFKA_PASSWORD'\";
-              };' > /etc/kafka/jaas.conf &&
-              /etc/confluent/docker/run
+                username=\"admin\"
+                password=\"admin-secret\"
+                user_admin=\"admin-secret\";
+              };" > /etc/kafka/jaas.conf &&
+      
+              echo "security.protocol=SASL_PLAINTEXT
+              sasl.mechanism=PLAIN
+              sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username=\"admin\" password=\"admin-secret\";" > /etc/kafka/client.properties &&
+      
+              /etc/confluent/docker/run &
+      
+              echo "Waiting for Kafka to be ready..." &&
+              sleep 15 &&
+      
+              kafka-topics \
+                --bootstrap-server localhost:9092 \
+                --command-config /etc/kafka/client.properties \
+                --create \
+                --if-not-exists \
+                --topic $$KAFKA_TOPIC_NAME \
+                --partitions $$KAFKA_TOPIC_PARTITIONS \
+                --replication-factor 1 &&
+      
+              wait
             "
 
       - name: Wait for Kafka
@@ -155,4 +174,3 @@ jobs:
         if: always()
         run: |
           docker stop fashion_api || true
-          docker stop qdrant || true

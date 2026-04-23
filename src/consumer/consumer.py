@@ -16,66 +16,90 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
-def create_consumer():
-    return KafkaConsumer(
-        settings.kafka_topic_predictions,
-        bootstrap_servers=settings.kafka_bootstrap_servers,
-        value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+class KafkaConsumerService:
 
-        security_protocol=settings.kafka_security_protocol,
-        sasl_mechanism=settings.kafka_sasl_mechanism,
-        sasl_plain_username=settings.kafka_username,
-        sasl_plain_password=settings.kafka_password,
-    )
+    def __init__(self):
+        self.consumer = None
+        self.qdrant = None
 
+    def _create_consumer(self) -> KafkaConsumer:
+        return KafkaConsumer(
+            settings.kafka_topic_predictions,
+            bootstrap_servers=settings.kafka_bootstrap_servers,
+            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
 
-def run_consumer():
+            security_protocol=settings.kafka_security_protocol,
+            sasl_mechanism=settings.kafka_sasl_mechanism,
+            sasl_plain_username=settings.kafka_username,
+            sasl_plain_password=settings.kafka_password,
+        )
 
-    logger.info("Starting Kafka consumer...")
-
-    try:
-        qdrant = QdrantService()
-        logger.info("Qdrant initialized in consumer")
-    except Exception:
-        logger.exception("Failed to init Qdrant")
-        qdrant = None
-
-    while True:
+    def _init_qdrant(self) -> None:
         try:
-            consumer = create_consumer()
-            logger.info("Kafka connected")
-            break
+            self.qdrant = QdrantService()
+            logger.info("Qdrant initialized in consumer")
+        except RuntimeError:
+            logger.exception("Failed to init Qdrant")
+            self.qdrant = None
 
-        except NoBrokersAvailable:
-            logger.error("Kafka not available")
-            time.sleep(3)
+    def _connect_kafka(self) -> None:
+        while True:
+            try:
+                self.consumer = self._create_consumer()
+                logger.info("Kafka connected")
+                return
 
-        except KafkaError as e:
-            logger.error(f"Kafka error: {e}")
-            time.sleep(3)
+            except NoBrokersAvailable:
+                logger.error("Kafka not available, retrying...")
+                time.sleep(3)
 
-    for message in consumer:
+            except KafkaError:
+                logger.exception("Kafka connection error, retrying...")
+                time.sleep(3)
+
+    def _process_message(self, message) -> None:
         try:
             event = KafkaPredictionEvent(**message.value)
+        except ValidationError:
+            logger.error("Invalid message format")
+            return
 
-            logger.info(
-                f"Processing event {event.event_id} class={event.prediction['class_name']}"
+        logger.info(
+            "Processing event %s class=%s",
+            event.event_id,
+            event.prediction["class_name"],
+        )
+
+        if self.qdrant is None:
+            logger.warning("Qdrant not available, skipping save")
+            return
+
+        try:
+            vector = np.array(event.vector, dtype=np.float32)
+
+            self.qdrant.save_prediction(
+                vector=vector,
+                prediction=event.prediction,
             )
 
-            if qdrant is not None:
-                vector = np.array(event.vector, dtype=np.float32)
+        except RuntimeError:
+            logger.exception("Qdrant save failed")
 
-                qdrant.save_prediction(
-                    vector=vector,
-                    prediction=event.prediction,
-                )
+        except ValueError:
+            logger.exception("Invalid vector data")
 
-        except ValidationError as e:
-            logger.error(f"Invalid message: {e}")
+    def run(self) -> None:
+        logger.info("Starting Kafka consumer...")
 
-        except Exception:
-            logger.exception("Failed to process message")
+        self._init_qdrant()
+        self._connect_kafka()
+
+        assert self.consumer is not None
+
+        for message in self.consumer:
+            self._process_message(message)
 
 
 if __name__ == "__main__":
-    run_consumer()
+    service = KafkaConsumerService()
+    service.run()

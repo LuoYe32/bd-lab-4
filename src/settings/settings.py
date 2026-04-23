@@ -20,12 +20,13 @@ class Settings(BaseSettings):
 
     # Kafka
     kafka_bootstrap_servers: Optional[str] = None
-    kafka_topic_predictions: Optional[str] = None
+    kafka_topic_predictions: str = "predictions"
 
     kafka_security_protocol: Optional[str] = None
     kafka_sasl_mechanism: Optional[str] = None
     kafka_username: Optional[str] = None
     kafka_password: Optional[str] = None
+    kafka_cluster_id: Optional[str] = None
 
     # Docker
     docker_image: str = "bd-lab-1-6:latest"
@@ -50,8 +51,8 @@ class Settings(BaseSettings):
 
         if self.kafka_bootstrap_servers is None:
             missing.append("kafka_bootstrap_servers")
-        if self.kafka_topic_predictions is None:
-            missing.append("kafka_topic_predictions")
+        if self.kafka_cluster_id is None:
+            missing.append("kafka_cluster_id")
 
         if self.kafka_security_protocol == "SASL_PLAINTEXT":
             if self.kafka_username is None:
