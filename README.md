@@ -223,7 +223,7 @@ docker-compose up --build
 Docker образ публикуется в DockerHub:
 
 ```
-https://hub.docker.com/r/<username>/bd-lab-1-6
+https://hub.docker.com/r/<username>/bd-lab-2-6
 ```
 
 # DevSecOps Metadata
