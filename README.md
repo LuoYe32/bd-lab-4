@@ -10,6 +10,7 @@
 - GitHub Actions (CI/CD)
 - pytest (тестирование)
 - Qdrant (векторная база данных для поиска похожих объектов)
+- Kafka (асинхронная event-driven обработка предсказаний)
 
 ---
 
@@ -134,6 +135,76 @@ docker-compose up
 
 ---
 
+# Event Streaming (Kafka)
+
+В проект была добавлена асинхронная обработка предсказаний через Kafka.
+
+Архитектура:
+
+Client → FastAPI → Kafka → Consumer → Qdrant
+
+### Как это работает
+
+После запроса на предсказание:
+
+1. API принимает изображение или вектор
+2. модель делает предсказание
+3. API возвращает результат пользователю
+4. дополнительно публикуется Kafka event
+5. consumer читает event
+6. consumer сохраняет данные в Qdrant
+
+---
+
+### Почему Kafka
+
+Использование Kafka позволяет:
+
+- разделить inference и сохранение данных
+- сделать API быстрее
+- избежать блокирующей записи в Qdrant
+- масштабировать consumers независимо
+- реализовать event-driven architecture
+
+---
+
+### Kafka event schema
+
+В Kafka отправляется сообщение следующего формата:
+
+```json
+{
+  "event_id": "uuid",
+  "timestamp": "2026-04-28T10:00:00Z",
+  "source": "fashion-api",
+  "vector": [...],
+  "prediction": {
+    "class_id": 1,
+    "class_name": "Trouser",
+    "proba": [...]
+  }
+}
+```
+
+### Безопасность Kafka
+
+Kafka настроена с использованием:
+
+- SASL authentication
+- username/password authentication
+- отдельного cluster id
+- topic с несколькими partitions
+
+Секретные данные:
+
+- Kafka credentials
+- cluster id
+
+хранятся во Vault/.env и не размещаются в открытом коде.
+
+
+---
+
 # CI/CD Pipeline
 
 CI pipeline выполняет:
@@ -141,14 +212,19 @@ CI pipeline выполняет:
 1. установку зависимостей
 2. загрузку данных через DVC
 3. воспроизводимое обучение модели
-4. запуск тестов
-5. сборку Docker образа
-6. публикацию образа в DockerHub
+4. запуск Qdrant
+5. запуск Kafka
+6. запуск unit tests
+7. сборку Docker образа
+8. публикацию образа в DockerHub
 
 CD pipeline:
 
-1. запускает контейнер
-2. выполняет функциональное тестирование API (`scenario.json`)
+1. поднимает Qdrant
+2. поднимает Kafka
+3. запускает API контейнер
+4. запускает consumer контейнер
+5. выполняет функциональное тестирование (`scenario.json`)
 
 ---
 
